@@ -1053,7 +1053,7 @@ describe('InputHandler', () => {
       expect(dataReceived[0]).toBe(`\x1b[200~${pasteText}\x1b[201~`);
     });
 
-    test('strips end-of-paste markers from bracketed paste', () => {
+    test('neutralises control characters in a bracketed paste', () => {
       const inputElement = createMockContainer();
       const handler = new InputHandler(
         ghostty,
@@ -1075,7 +1075,7 @@ describe('InputHandler', () => {
       inputElement.dispatchEvent(beforeInputEvent);
 
       expect(dataReceived.length).toBe(1);
-      expect(dataReceived[0]).toBe('\x1b[200~lsid\r\x1b[201~');
+      expect(dataReceived[0]).toBe('\x1b[200~ls [201~id\r\x1b[201~');
     });
 
     test('handles multi-line paste', () => {
