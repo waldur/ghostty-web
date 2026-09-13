@@ -1,0 +1,70 @@
+name: waldur release
+
+# Builds the package from waldur/main and attaches the npm tarball to a GitHub
+# release, for Waldur to pin by URL and integrity hash. Uses its own tag prefix
+# so it never overlaps with the upstream `v*` npm publish workflow.
+on:
+  push:
+    tags:
+      - 'waldur-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: build and release tarball
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Check tag matches package version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "$GITHUB_REF_NAME" != "waldur-v$VERSION" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $VERSION" >&2
+            exit 1
+          fi
+
+      - uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - uses: ./.github/actions/setup-zig
+        with:
+          version: 0.15.2
+
+      - name: Build WASM
+        run: ./scripts/build-wasm.sh
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run tests
+        run: bun test
+
+      - name: Build library
+        run: bun run build:lib && bun run build:wasm-copy
+
+      - name: Pack
+        id: pack
+        run: |
+          TARBALL=$(npm pack --silent)
+          INTEGRITY="sha512-$(openssl dgst -sha512 -binary "$TARBALL" | base64 -w0)"
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+          echo "integrity=$INTEGRITY" >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+          INTEGRITY: ${{ steps.pack.outputs.integrity }}
+        run: |
+          {
+            echo "Built from ${GITHUB_SHA} with Ghostty $(git -C ghostty rev-parse HEAD)."
+            echo
+            echo "npm integrity: \`${INTEGRITY}\`"
+          } > notes.md
+          gh release create "$GITHUB_REF_NAME" "$TARBALL" --title "$GITHUB_REF_NAME" --notes-file notes.md
