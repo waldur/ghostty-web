@@ -503,6 +503,23 @@ describe('paste()', () => {
       term.dispose();
     });
 
+    test('should strip end-of-paste markers inside a bracketed paste', async () => {
+      if (!container) return;
+      const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
+      term.open(container!);
+      term.write('\x1b[?2004h'); // Application enables bracketed paste
+
+      let receivedData = '';
+      term.onData((data) => {
+        receivedData = data;
+      });
+
+      term.paste('ls\x1b[201~id\r');
+
+      expect(receivedData).toBe('\x1b[200~lsid\r\x1b[201~');
+      term.dispose();
+    });
+
     test('should respect disableStdin option', async () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24, disableStdin: true });
       // Using shared container from beforeEach
